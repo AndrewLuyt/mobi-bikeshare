@@ -20,15 +20,6 @@ library(gganimate)
 
 SHAPEDATA <- "data/local-area-boundary.geojson"
 
-#' ### Helper function for vectors
-angle_from_x_axis <- function(y,x) {
-  angle <- atan2(y, x)
-  if (y<0) {
-    angle <- angle + 2 * pi
-  }
-  angle * 180 / pi
-}
-
 #' ## Read all the raw Mobi CSVs
 df <-
   list.files(path = "./data",
