@@ -42,7 +42,11 @@ df <-
                   'station_return','membership','trip_distance','trip_seconds',
                   'voltage_depart_mv','voltage_return_mv','temp_depart',
                   'temp_return','stopover_seconds','n_stopovers'))) %>%
-  mutate(trip_minutes =  trip_seconds / 60,
+  mutate(depart_time = ymd_hm(depart_time),
+         return_time = ymd_hm(return_time),
+         wday = lubridate::wday(depart_time, label = TRUE, abbr = TRUE),
+         hour = lubridate::hour(depart_time),
+         trip_minutes =  trip_seconds / 60,
          stopover_minutes = stopover_seconds / 60,
          kph = trip_distance / (trip_minutes - stopover_minutes) / 1000 * 60) %>%
   filter(trip_minutes > 0, trip_minutes < 60*12) %>%
