@@ -1,16 +1,14 @@
-#' ---
-#' author: "Andrew Luyt"
-#' title: "WIP: Clean and process the Mobi bikeshare dataset"
-#' output: github_document
-#' ---
-#'
-#' Download the data yourself as described in the README
-#' and run this notebook, which will remove some nulls,
-#' transform & combine the data into more convenient form,
-#' then save various `.Rdata`, `.geoJSON`, and `.csv` files for use
-#' elsewhere.
+WIP: Clean and process the Mobi bikeshare dataset
+================
+Andrew Luyt
+2021-08-22
 
-#+ echo=TRUE, message=FALSE, results="hide"
+Download the data yourself as described in the README and run this
+notebook, which will remove some nulls, transform & combine the data
+into more convenient form, then save various `.Rdata`, `.geoJSON`, and
+`.csv` files for use elsewhere.
+
+``` r
 library(data.table)
 library(tidyverse)
 library(lubridate)
@@ -19,8 +17,11 @@ library(sf)         # Vancouver map
 library(gganimate)
 
 SHAPEDATA <- "data/local-area-boundary.geojson"
+```
 
-#' ### Helper function for vectors
+### Helper function for vectors
+
+``` r
 angle_from_x_axis <- function(y,x) {
   angle <- atan2(y, x)
   if (y<0) {
@@ -28,8 +29,11 @@ angle_from_x_axis <- function(y,x) {
   }
   angle * 180 / pi
 }
+```
 
-#' ## Read all the raw Mobi CSVs
+## Read all the raw Mobi CSVs
+
+``` r
 df <-
   list.files(path = "./data",
              pattern = "^Mobi_System_Data.*.csv",
@@ -50,12 +54,15 @@ df <-
           regex = "([0-9]+) (.*)") %>%
   extract(station_return, into = c("id_return", "station_return"),
           regex = "([0-9]+) (.+)")
+```
 
-#' ## Add map angle of trip
-#' This is the angle (from the positive x-axis) of the line drawn on a map
-#' from the start of the trip to the end. The station data (scraped from
-#' Mobi's web site) includes the coordinates of bike stations.
-#+ echo=TRUE, message=FALSE, results="hide"
+## Add map angle of trip
+
+This is the angle (from the positive x-axis) of the line drawn on a map
+from the start of the trip to the end. The station data (scraped from
+Mobi’s web site) includes the coordinates of bike stations.
+
+``` r
 stations <- read_csv("data/scraped_stations.csv")
 
 # Join lat/lon of start and end stations to rides
@@ -67,12 +74,15 @@ df <- df %>%
          lon_return = longitude.y, lat_return = latitude.y, membership,
          trip_distance, trip_minutes, n_stopovers, stopover_minutes, kph) %>%
   drop_na() # mostly this removes rows with missing lon/lat coordinates
+```
 
-#' Create vector *components* for each ride. This lets us, during analysis,
-#' aggregate trips (e.g. all rides from station *001* during one hour) and
-#' easily obtain an overall vector by simply adding up the components.
-#' We use distGeo to account for the curvature of the earth, though it
-#' doesn't matter much at these small scales.
+Create vector *components* for each ride. This lets us, during analysis,
+aggregate trips (e.g. all rides from station *001* during one hour) and
+easily obtain an overall vector by simply adding up the components. We
+use distGeo to account for the curvature of the earth, though it doesn’t
+matter much at these small scales.
+
+``` r
 df <- df %>%
   mutate(delta_x = distGeo(cbind(lon_depart, lat_depart),
                            cbind(lon_return, lat_depart)) / 1000,
@@ -82,18 +92,22 @@ df <- df %>%
            if_else(lon_return > lon_depart, delta_x, (-1) * delta_x),
          delta_y =  # north positive, south negative
            if_else(lat_return > lat_depart, delta_y, (-1) * delta_y))
+```
 
-#' Change some names in the map data and remove a list column
-#+ echo=TRUE, message=FALSE, results="hide"
+Change some names in the map data and remove a list column
+
+``` r
 van_map <- st_read(SHAPEDATA) %>%
   mutate(name = replace(name, which(name == "Arbutus-Ridge"), "Arbutus Ridge"),
          name = replace(name, which(name == "Kensington-Cedar Cottage"),
                         "Kensington")) %>%
   select(-geo_point_2d)
+```
 
-#' ## Export cleaned data
-#+ echo=TRUE, message=FALSE, results="hide"
+## Export cleaned data
+
+``` r
 st_write(obj = van_map, dsn = "data/vancouver_map.geojson", delete_dsn = TRUE)
 save(df, file = "data/mobi_rides.Rdata")
 write_csv(df, file = "data/mobi_rides.csv")
-
+```
