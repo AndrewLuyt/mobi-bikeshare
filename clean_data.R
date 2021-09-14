@@ -15,7 +15,7 @@ library(data.table)
 library(tidyverse)
 library(lubridate)
 library(geosphere)  # for distGeo()
-library(sf)         # Vancouver map
+library(sf)         # for plotting maps
 library(gganimate)
 
 SHAPEDATA <- "data/local-area-boundary.geojson"
@@ -40,16 +40,18 @@ df <-
          trip_minutes =  trip_seconds / 60,
          stopover_minutes = stopover_seconds / 60,
          kph = trip_distance / (trip_minutes - stopover_minutes) / 1000 * 60) %>%
-  filter(trip_minutes > 0, trip_minutes < 60*12) %>%
+  filter(trip_minutes > 0,
+         trip_minutes < 60*12,
+         membership != "") %>%
   extract(station_depart, into = c("id_depart", "station_depart"),
           regex = "([0-9]+) (.*)") %>%
   extract(station_return, into = c("id_return", "station_return"),
           regex = "([0-9]+) (.+)")
 
 #' ## Add map angle of trip
-#' This is the angle (from the positive x-axis) of the line drawn on a map
-#' from the start of the trip to the end. The station data (scraped from
-#' Mobi's web site) includes the coordinates of bike stations.
+#' This is the angle (from the positive x-axis, pointing east) of the line drawn
+#' on a map from the start of the trip to the end. The station data (scraped
+#' from Mobi's web site) includes the coordinates of bike stations.
 #+ echo=TRUE, message=FALSE, results="hide"
 stations <- read_csv("data/scraped_stations.csv")
 

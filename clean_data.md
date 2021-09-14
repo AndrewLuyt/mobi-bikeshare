@@ -1,7 +1,7 @@
 WIP: Clean and process the Mobi bikeshare dataset
 ================
 Andrew Luyt
-2021-08-22
+2021-09-13
 
 Download the data yourself as described in the README and run this
 notebook, which will remove some nulls, transform & combine the data
@@ -13,22 +13,10 @@ library(data.table)
 library(tidyverse)
 library(lubridate)
 library(geosphere)  # for distGeo()
-library(sf)         # Vancouver map
+library(sf)         # for plotting maps
 library(gganimate)
 
 SHAPEDATA <- "data/local-area-boundary.geojson"
-```
-
-### Helper function for vectors
-
-``` r
-angle_from_x_axis <- function(y,x) {
-  angle <- atan2(y, x)
-  if (y<0) {
-    angle <- angle + 2 * pi
-  }
-  angle * 180 / pi
-}
 ```
 
 ## Read all the raw Mobi CSVs
@@ -64,9 +52,10 @@ df <-
 
 ## Add map angle of trip
 
-This is the angle (from the positive x-axis) of the line drawn on a map
-from the start of the trip to the end. The station data (scraped from
-Mobi’s web site) includes the coordinates of bike stations.
+This is the angle (from the positive x-axis, pointing east) of the line
+drawn on a map from the start of the trip to the end. The station data
+(scraped from Mobi’s web site) includes the coordinates of bike
+stations.
 
 ``` r
 stations <- read_csv("data/scraped_stations.csv")
