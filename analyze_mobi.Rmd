@@ -1,0 +1,702 @@
+---
+title: "Analysis: Vancouver's *Mobi* Bike Share"
+author: "Andrew Luyt"
+date: "`r paste('<br>Last updated ',format(Sys.Date(), '%A %B %d, %Y'))`"
+output: 
+  github_document:
+    toc: true
+    toc_depth: 2
+always_allow_html: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r packages and load data, echo=TRUE, results="hide", message=FALSE}
+library(tidyverse)
+library(lubridate)
+library(sf)         # Vancouver map
+library(gganimate)
+library(viridis)
+
+RIDES = "data/mobi_rides.Rdata"
+if(file.exists(RIDES)) {
+  load(RIDES)
+  df <- as_tibble(df) %>% 
+    mutate(hour = hour(depart_time))
+} else {
+  stop("Please run clean_data.R to create the required data")
+}
+
+MAP = "data/vancouver_map.geojson"
+if(file.exists(MAP)) {
+  MAP <- st_read(MAP)
+} else {
+  stop("Please run clean_data.R to create the required data")
+}
+
+STANLEY_PARK = "data/parks-polygon-representation.geojson"
+if(file.exists(STANLEY_PARK)) {
+  STANLEY_PARK <- st_read(STANLEY_PARK)
+  STANLEY_PARK <- STANLEY_PARK %>% filter(park_name == 'Stanley Park')
+}
+
+rm(RIDES)
+
+# Helper function for vectors
+angle_from_x_axis <- function(y,x) {
+  angle <- atan2(y, x)
+  if (y<0) {
+    angle <- angle + 2 * pi
+  }
+  angle * 180 / pi
+}
+
+```
+
+```{r theming}
+default_theme <- theme_set(theme_bw())
+theme_update(panel.grid = element_blank(),
+             legend.justification = "top",
+             plot.title = element_text(size=14, face="bold"),
+             axis.text.x = element_text(size = 10),
+             plot.margin = unit(c(0.3,0,0.3,0), "cm"))
+
+theme_map <- theme_bw() +
+  theme(axis.title = element_blank(), 
+        axis.text = element_blank(), 
+        axis.ticks = element_blank(),
+        panel.grid = element_blank(),
+        panel.background = element_rect(fill = 'white'),
+        plot.title = element_text(size=20, face="bold"),
+        legend.justification = "top",
+        legend.position = "none", 
+        plot.margin = unit(c(0.3,0,0.3,0), "cm"))
+
+theme_map_dark <- theme_bw() +
+  theme(axis.title = element_blank(), 
+        axis.text = element_blank(), 
+        axis.ticks = element_blank(),
+        panel.grid = element_blank(),
+        panel.background = element_rect(fill = 'grey40'),
+        plot.title = element_text(size=20, face="bold"),
+        legend.justification = "top",
+        legend.position = "none", 
+        plot.margin = unit(c(0.3,0,0.3,0), "cm"))
+```
+
+```{r arrange membership factors by number of rides}
+ordered_memberships <- df %>% 
+  group_by(membership) %>% 
+  tally() %>% 
+  arrange(desc(n)) %>% 
+  pull(membership) %>% 
+  as.vector()
+df <- df %>% 
+  mutate(membership = fct_relevel(membership, ordered_memberships))
+```
+
+
+```{r plot rides by membership}
+df %>% 
+  group_by(membership) %>% tally() %>%  ggplot(aes(membership, n)) + geom_col() + coord_flip()
+```
+
+There are 20 membership types listed, but on the [https://www.mobibikes.ca/en/offers-subscription](webpage),
+only 6 are listed. The others seem to be grandfathered in, or special offers
+that aren't generally available.  We'll limit our analysis to a subset of
+the most popular memberships. Two of these popular memberships, the 
+**Community Pass** and **365 Day Founding Plus** are not currently listed as available.
+
+```{r}
+popular_memberships <- df %>% 
+  group_by(membership) %>% 
+  summarise(n = n()) %>% 
+  filter(n > 9000) %>% 
+  pull(membership)
+popular_memberships <- popular_memberships[1:8]
+```
+
+
+```{r}
+df %>% 
+  filter(membership %in% popular_memberships[1:6]) %>% 
+  group_by(day = as.Date(depart_time), membership) %>% 
+  tally() %>% 
+  ggplot(aes(x = day, y = n, color = membership)) +
+  geom_line(alpha = 0.5) + geom_smooth(se=FALSE) +
+  labs(title = "Daily rides")
+```
+
+The 30 day and 24 hour passes are the most popular. The 365 passes seem to
+be bought by those who don't mind riding in winter, as their is much less
+seasonal variation in rides for those members.
+
+Particularly in summer there's a lot of daily variation in rides. 
+
+### TODO 
+Is it from rain or what? You could
+get rainfall data (downtown vancouver, not the airport?) and plot/corr mm of rain
+with n_rides.
+
+```{r rides by weekday and membership}
+df %>% 
+  filter(membership %in% popular_memberships) %>% 
+  group_by(weekday = wday(depart_time, label = TRUE, week_start = 1), membership) %>% 
+  ggplot(aes(weekday, fill = membership)) +
+  geom_bar(position = 'stack', color = 'black')
+```
+Weekends are really popular for 24-hour passes. The 365 passes are **more**
+popular during the **week**, suggesting they might be being used for commuting.
+
+```{r rides by weekday and membership 365 only}
+df %>% 
+  filter(membership %in% popular_memberships,
+         str_detect(membership, "365")) %>% 
+  group_by(weekday = wday(depart_time, label = TRUE, week_start = 1), membership) %>% 
+  ggplot(aes(weekday, fill = membership)) +
+  geom_bar(position = 'stack', color = 'black')
+```
+
+```{r look for patterns in mean by hour}
+x <- df %>% 
+  filter(membership %in% popular_memberships) %>% 
+  group_by(hour, membership) %>% 
+  summarize(across(where(is.numeric), mean))
+x %>% ggplot(aes(hour, trip_minutes)) + geom_col() + facet_wrap(~membership, ncol = 4)
+x %>% ggplot(aes(hour, trip_distance)) + geom_col() + facet_wrap(~membership, ncol = 4)
+x %>% ggplot(aes(hour, n_stopovers)) + geom_col() + facet_wrap(~membership, ncol = 4)
+x %>% ggplot(aes(hour, stopover_minutes)) + geom_col() + facet_wrap(~membership, ncol = 4)
+#x %>% ggplot(aes(hour, kph)) + geom_col() + facet_wrap(~membership, ncol = 4)
+```
+
+* 24 hour passes have the longest rides (in time and distance)
+* The 365 passes (especially Founding Plus) have more stopovers per trip
+  * and also longer stopovers on average
+
+```{r look for patterns in mean by weekday}
+x <- df %>% 
+  filter(membership %in% popular_memberships) %>% 
+  group_by(weekday = wday(depart_time, label = TRUE, week_start = 1), membership) %>% 
+  summarize(across(where(is.numeric), mean))
+x %>% ggplot(aes(weekday, trip_minutes)) + geom_col() + facet_wrap(~membership, ncol = 4)
+x %>% ggplot(aes(weekday, trip_distance)) + geom_col() + facet_wrap(~membership, ncol = 4)
+x %>% ggplot(aes(weekday, n_stopovers)) + geom_col() + facet_wrap(~membership, ncol = 4)
+x %>% ggplot(aes(weekday, stopover_minutes)) + geom_col() + facet_wrap(~membership, ncol = 4)
+x %>% ggplot(aes(weekday, kph)) + geom_col() + facet_wrap(~membership, ncol = 4)
+```
+
+* Trip durations and distances are very steady throughout the week
+* 24 hour pass holders ride the slowest.
+  * We noted above they also ride the longest duration and most distance.
+
+
+The **365 Day Founding Plus** pass is a real outlier. It has many times more
+stopovers per ride than any other type of pass.
+
+### Stopovers?
+Mobi bikes offer a [https://www.mobibikes.ca/en/news/make-quick-stop-stopover-mode](stopover mode) 
+where the bike's steering column locks and
+the integrated lock can be accessed. It is meant as a convenience when you 
+need to stop somewhere that doesn't have a Mobi docking station, like a grocery
+store. The ride timer doesn't stop and most Mobi memberships offer a maximum
+of 30 minutes of use before overage fees start, so it would be interesting
+to see what kinds of members have these stopovers on their trips. Let's
+graph rides by the number of stopovers taken then colour by the membership type.
+
+```{r number of stopovers by membership totals}
+df %>% 
+  filter(membership %in% popular_memberships) %>%
+  # filter(membership == "365 Day Founding Plus") %>% 
+  group_by(membership, n_stopovers) %>%
+  ggplot(aes(x = n_stopovers, fill = membership)) +
+  geom_bar()
+```
+
+As a first observation we see clearly that most people are taking a bike,
+riding immediately to a desination and then docking the bike. Only a comparative
+few stop somewhere along the way. Let's examine *only* those trips with at least
+1 stopover.
+
+```{r number of stopovers by membership totals only with stopovers}
+df %>% 
+  filter(membership %in% popular_memberships,
+         n_stopovers > 0) %>%
+  # filter(membership == "365 Day Founding Plus") %>% 
+  group_by(membership, n_stopovers) %>%
+  ggplot(aes(x = n_stopovers, fill = membership)) +
+  geom_bar() + 
+  labs(title = "Trips with at least 1 stopover") +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 15))
+```
+
+Rides with one stopover have a broad distribution of memberships.
+How about 2 or more stopovers?
+
+```{r number of stopovers by membership totals only with stopovers}
+df %>% 
+  filter(membership %in% popular_memberships,
+         n_stopovers > 1) %>%
+  # filter(membership == "365 Day Founding Plus") %>% 
+  group_by(membership, n_stopovers) %>%
+  ggplot(aes(x = n_stopovers, fill = membership)) +
+  geom_bar() + 
+  labs(title = "Trips with at least 2 stopovers") +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 15))
+```
+
+It looks like **365 Plus** and **365 Founding Plus** are the types of
+memberships used for trips with a few stopovers.  Let's draw a graph
+of *proportions* of rides, rather than total number of rides.
+
+```{r number of stopovers by membership proportions}
+df %>% 
+  filter(membership %in% popular_memberships) %>%
+  # filter(membership == "365 Day Founding Plus") %>% 
+  group_by(membership, n_stopovers) %>%
+  ggplot(aes(x = n_stopovers, fill = membership)) +
+  geom_bar(position = "fill") +
+  labs(title = "Proportions of memberships that stop n times during a ride",
+       subtitle = "As the number of stopovers increases, it becomes more likely the rider has a\n365 Day Founding Plus Pass",
+       y = "Proportion", x = "Stopovers") +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 15))
+```
+
+**365 Day Founding Plus** dominates the crowd that stops at a location during their
+ride. **365 Day Plus** is in second place.  These both offer a notable clause in
+their [https://www.mobibikes.ca/en/terms-and-conditions-use](agreements.) 
+Most memberships offer 30 minutes of riding, after which
+overage fees begin, but these two passes offer **60 minutes**. If a person
+intends to use the bike system for running errands, going somewhere for
+lunch, or other purposes which require more time than a simple A to B trip, 
+these passes offer the best value by avoiding overage fees.
+
+On the [https://www.mobibikes.ca/en/offers-subscription](offers page) however
+we don't see the **365 Day Founding Plus** pass for sale, suggesting it is
+some sort of special offer not generally available to the public. People who
+hold this pass have notably more stopovers per trip than any other membership,
+suggesting that whomever has one makes good use of it.
+
+The 365 Plus
+pass **is** available for sale, explaining its apparent popularity with
+people who regularly need more time on their rides.
+
+Let's look deeper into these *founding plus* members - are there any notable
+geographic patterns?
+
+```{r animate 365 plus and founding plus rides}
+TMP_DF <- df %>% 
+  filter(membership %in% c("365 Day Founding Plus", "365 Plus"), 
+         id_depart != id_return) %>%  # remove round trips
+  group_by(hour, id_depart) %>%
+  mutate(x = sum(lon_return - lon_depart),
+         y = sum(lat_return - lat_depart),
+         nrides = n()) %>%
+  ungroup() %>%
+  rowwise() %>%
+  mutate(angle = angle_from_x_axis(y,x)) %>%
+  ungroup() %>%
+  # bin angles into 4 quadrants for colouring
+  mutate(angle_group = cut_interval(angle, n = 4, labels = 1:4)) %>%  
+  # filter(magnitude >= 50) %>% # higher numbers make the map less cluttered
+  arrange(hour, desc(angle))
+
+SCALE = 0.004
+p <- TMP_DF %>%
+  filter(month(depart_time) %in% 6:7) %>% 
+         # wday(depart_time, week_start =  1) %in% 1:5) %>%  # weekdays only
+  ggplot(aes(x = lon_depart,
+             y = lat_depart,
+             xend = lon_depart + x * SCALE,
+             yend = lat_depart + y * SCALE,
+             color = angle_group,
+             alpha = nrides,
+             # size = nrides,
+             group = id_depart)) +
+  geom_sf(data = MAP, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
+  geom_sf(data = STANLEY_PARK, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
+  geom_segment(arrow = arrow(length = unit(0.007, "npc"), type = "closed"), size=0.7) +
+  scale_alpha_continuous(range = c(0.4, 1)) +
+  # scale_size_continuous(range = c(0.4, 0.7)) +
+  xlim(c(-123.19, -123.050)) +
+  ylim(c(49.245, 49.315)) +
+  theme_map_dark +
+  annotate("text", x = -123.1684, y = 49.3117, label = "Vancouver", color = "black", cex = 18) +
+  annotate("text", x = -123.169, y = 49.312, label = "Vancouver", color = "grey60", cex = 18) +
+  labs(subtitle = "Arrows show the average direction of traffic out of each station in the Mobi bike sharing system.\nDirection is measured as a straight line from start station to end station.\nLonger arrows mean a stronger tendency for traffic to travel that direction.",
+       caption = "Andrew Luyt, 2021  |  Source: Mobi public data") +
+  transition_states(hour, transition_length = 8, state_length = 1) +
+  ggtitle("365 Day Plus & Founding Plus bicycle traffic, June-July 2021     Hour: {next_state}") +
+  shadow_wake(wake_length = 0.01,  wrap = TRUE) +
+  enter_fade() +
+  exit_fade() 
+
+FPS = 20; W = 960; H = 660; DTL = 1; NFRAMES = 1*24*9 # bins per hour * 24 hours * frames/hour
+animate(plot = p, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
+```
+
+## Animating on ENDING stations
+for 365 plus/founding, the animation wasn't insightful. The trends were
+very weak. For all memberships, the trends were
+
+```{r animate traffic into ending stations by all members}
+TMP_DF <- df %>%
+  filter(month(depart_time) %in% 6:7,
+         #membership %in% c("365 Day Founding Plus", "365 Plus"), 
+         id_depart != id_return) %>%  # remove round trips
+  group_by(hour, id_return) %>%
+  summarise(x = sum(lon_return - lon_depart),
+            y = sum(lat_return - lat_depart),
+            nrides = n(),
+            lon_return = first(lon_return),
+            lat_return = first(lat_return)) %>%
+  ungroup() %>%
+  rowwise() %>%
+  mutate(angle = angle_from_x_axis(y,x)) %>%
+  ungroup() %>%
+  # bin angles into 4 quadrants for colouring
+  mutate(angle_group = cut_interval(angle, n = 4, labels = 1:4)) %>%  
+  # filter(magnitude >= 50) %>% # higher numbers make the map less cluttered
+  arrange(hour, desc(angle))
+
+SCALE = 0.004
+p <- TMP_DF %>%
+  ggplot(aes(x = lon_return,
+             y = lat_return,
+             xend = lon_return - x * SCALE,
+             yend = lat_return - y * SCALE,
+             color = angle_group,
+             alpha = nrides,
+             # size = nrides,
+             group = id_return)) +
+  geom_sf(data = MAP, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
+  geom_sf(data = STANLEY_PARK, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
+  geom_segment(arrow = arrow(length = unit(0.007, "npc"), type = "closed", ends = "first"), size=0.7) +
+  scale_alpha_continuous(range = c(0.4, 1)) +
+  # scale_size_continuous(range = c(0.4, 0.7)) +
+  xlim(c(-123.19, -123.050)) +
+  ylim(c(49.245, 49.315)) +
+  theme_map_dark +
+  annotate("text", x = -123.1684, y = 49.3117, label = "Vancouver", color = "black", cex = 18) +
+  annotate("text", x = -123.169, y = 49.312, label = "Vancouver", color = "grey60", cex = 18) +
+  labs(subtitle = "Arrows show the average direction of traffic into each station in the Mobi bike sharing system.\nDirection is averaged as a straight line from all start stations to end station.\nLonger arrows mean a stronger tendency for traffic to travel that direction.",
+       caption = "Andrew Luyt, 2021  |  Source: Mobi public data") +
+  transition_states(hour, transition_length = 8, state_length = 1) +
+  ggtitle("Traffic ending at bike stations, June-July 2021     Hour: {next_state}") +
+  shadow_wake(wake_length = 0.01,  wrap = TRUE) +
+  enter_fade() +
+  exit_fade() 
+
+FPS = 20; W = 960; H = 660; DTL = 1; NFRAMES = 1*24*9 # bins per hour * 24 hours * frames/hour
+animate(plot = p, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
+```
+
+Most 60-minute-limit traffic averages out to traveling in to downtown, centered
+on the districts east of Granville Street. Later, we'll examine
+all bike traffic and see it shows a similar pattern.
+
+In [https://andrewluyt.github.io/divvy-bikeshare/](a previous analysis of the Divvy bikeshare) 
+in Chicago, I found similar bike traffic: most traffic flowed from the outlying
+districts towards a central core of high activity.
+
+```{r}
+df %>% 
+  filter(membership %in% popular_memberships) %>% 
+  group_by(membership) %>% 
+  # summarise(n = n()) %>% 
+  filter(n_stopovers > 0) %>% 
+  ggplot(aes(n_stopovers, n, color = membership)) +
+  geom_line(method = "lm")
+```
+
+
+```{r look for patterns in sum by hour}
+x <- df %>% 
+  filter(membership %in% popular_memberships) %>% 
+  group_by(hour, membership) %>% 
+  summarize(across(where(is.numeric), sum))
+x %>% ggplot(aes(hour, trip_minutes)) + geom_col() + facet_wrap(~membership, ncol = 4)
+x %>% ggplot(aes(hour, trip_distance)) + geom_col() + facet_wrap(~membership, ncol = 4)
+x %>% ggplot(aes(hour, n_stopovers)) + geom_col() + facet_wrap(~membership, ncol = 4)
+x %>% ggplot(aes(hour, stopover_minutes)) + geom_col() + facet_wrap(~membership, ncol = 4)
+```
+
+```{r look for patterns in sum by weekday}
+x <- df %>% 
+  filter(membership %in% popular_memberships) %>% 
+  group_by(weekday = wday(depart_time, label = TRUE, week_start = 1), membership) %>% 
+  summarize(across(where(is.numeric), sum))
+x %>% ggplot(aes(weekday, trip_minutes)) + geom_col() + facet_wrap(~membership, ncol = 4)
+x %>% ggplot(aes(weekday, trip_distance)) + geom_col() + facet_wrap(~membership, ncol = 4)
+x %>% ggplot(aes(weekday, n_stopovers)) + geom_col() + facet_wrap(~membership, ncol = 4)
+x %>% ggplot(aes(weekday, stopover_minutes)) + geom_col() + facet_wrap(~membership, ncol = 4)
+```
+
+## TODO: motion vectors & volume for interesting membership types
+
+```{r}
+
+df %>% 
+  filter(membership %in% popular_memberships) %>% 
+  group_by(membership, hour) %>% 
+  ggplot(aes(x = hour)) +
+  geom_bar() +
+  facet_wrap(~membership, scales = 'fixed', ncol = 4)
+
+df %>% 
+  filter(membership %in% popular_memberships) %>% 
+  group_by(membership, hour) %>% 
+  summarise(across(where(is.numeric), ~mean(.x, trim = 0.05))) %>% 
+  ggplot(aes(x = hour, y = n_stopovers)) +
+  geom_col() +
+  facet_wrap(~membership, ncol = 4) +
+  labs(title = "Average stopovers per hour")
+```
+
+
+
+```{r create hourly vectors}
+
+TMP_DF <- df %>%
+  filter(id_depart != id_return) %>%  # remove round trips
+  group_by(hour, id_depart) %>%
+  mutate(x = sum(lon_return - lon_depart),
+         y = sum(lat_return - lat_depart),
+         nrides = n()) %>%
+  ungroup() %>%
+  rowwise() %>%
+  mutate(angle = angle_from_x_axis(y,x)) %>%
+  ungroup() %>%
+  # bin angles into 4 quadrants for colouring
+  mutate(angle_group = cut_interval(angle, n = 4, labels = 1:4)) %>%  
+  # filter(magnitude >= 50) %>% # higher numbers make the map less cluttered
+  arrange(depart_time, desc(angle))
+```
+
+```{r create static vector map}
+SCALE = 0.004
+SCALE = 0.002
+
+TMP_DF %>% 
+  filter(hour == 8, month(depart_time) == 7,
+         wday(depart_time, week_start =  1) %in% 1:5) %>% 
+  ggplot(aes(x = lon_depart,
+             y = lat_depart,
+             xend = lon_depart + x * SCALE,
+             yend = lat_depart + y * SCALE,
+             color = angle_group,
+             group = id_depart)) +
+  geom_sf(data = MAP, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
+  geom_sf(data = STANLEY_PARK, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
+  geom_point(aes(fill = nrides, size = nrides), pch = 21, color = 'black') +
+  geom_segment(arrow = arrow(length = unit(0.01, "npc")), size=0.6) +
+  scale_fill_viridis(option = "plasma") +
+  xlim(c(-123.19, -123.050)) +
+  ylim(c(49.245, 49.315)) +
+  theme_map_dark +
+    annotate("text", x = -123.1684, y = 49.3114, label = "Vancouver", color = "black", cex = 18) +
+  annotate("text", x = -123.169, y = 49.312, label = "Vancouver", color = "grey60", cex = 18) +
+    annotate("text", x = -123.06, y = 49.3114, label = "🚲", color = "black", cex = 30) +
+
+  ggtitle("Average Mobi traffic direction by the hour, July 2021   {next_state}")
+```
+
+The easternmost station in Stanley Park with the huge westward signal is
+station 105, "Stanley Park - Totem Poles". This probably represents people
+riding the seawall in the legal direction and dropping off their bike at the 
+Second Beach station at the west side of the park.
+
+## TODO: separate weekday & weekend
+### Consider nrides scaling the size of the arrows (thicker = busier) or alpha
+
+## TODO: traffic coming IN to stations. arrow(ends = 'first' ?)
+
+```{r animate traffic flow patterns}
+SCALE = 0.0008
+p <- TMP_DF %>%
+  filter(month(depart_time) %in% 6:7) %>% 
+         # wday(depart_time, week_start =  1) %in% 1:5) %>%  # weekdays only
+  ggplot(aes(x = lon_depart,
+             y = lat_depart,
+             xend = lon_depart + x * SCALE,
+             yend = lat_depart + y * SCALE,
+             color = angle_group,
+             alpha = nrides,
+             # size = nrides,
+             group = id_depart)) +
+  geom_sf(data = MAP, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
+  geom_sf(data = STANLEY_PARK, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
+  geom_segment(arrow = arrow(length = unit(0.007, "npc"), type = "closed"), size=0.7) +
+  scale_alpha_continuous(range = c(0.4, 1)) +
+  # scale_size_continuous(range = c(0.4, 0.7)) +
+  xlim(c(-123.19, -123.050)) +
+  ylim(c(49.245, 49.315)) +
+  theme_map_dark +
+  annotate("text", x = -123.1684, y = 49.3117, label = "Vancouver", color = "black", cex = 18) +
+  annotate("text", x = -123.169, y = 49.312, label = "Vancouver", color = "grey60", cex = 18) +
+  labs(subtitle = "Arrows show the average direction of traffic out of each station in the Mobi bike sharing system.\nDirection is measured as a straight line from start station to end station.\nLonger arrows mean a stronger tendency for traffic to travel that direction.",
+       caption = "Andrew Luyt, 2021  |  Source: Mobi public data") +
+  transition_states(hour, transition_length = 8, state_length = 1) +
+  ggtitle("Mobi bicycle traffic, June-July 2021     Hour: {next_state}") +
+  shadow_wake(wake_length = 0.01,  wrap = TRUE) +
+  enter_fade() +
+  exit_fade() 
+
+FPS = 20; W = 960; H = 660; DTL = 1; NFRAMES = 1*24*9 # bins per hour * 24 hours * frames/hour
+animate(plot = p, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
+```
+
+```{r create hourly volume map}
+
+TMP_DF <- df %>%
+  # filter(id_depart != id_return) %>%  # remove round trips
+  filter(month(depart_time) == 7) %>% 
+  group_by(hour, id_depart) %>%
+  summarise(rides = n(), 
+            lon_depart = mean(lon_depart), 
+            lat_depart = mean(lat_depart))
+```
+
+## TODO: separate weekday & weekend
+## TODO: combine volume and direction in one animation?
+
+```{r animate station volume}
+p <-
+  TMP_DF %>%
+  ggplot(aes(x = lon_depart,
+             y = lat_depart,
+             fill = rides,
+             size = rides,
+             group = id_depart)) +
+  geom_sf(data = MAP, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
+  geom_sf(data = STANLEY_PARK, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
+  geom_point(pch = 21, color = "black") +
+  xlim(c(-123.19, -123.050)) +
+  ylim(c(49.245, 49.315)) +
+  theme_map_dark +
+  scale_fill_viridis(option = "plasma", begin = 0.25) +
+  scale_size(range = c(2, 11)) +
+  annotate("text", x = -123.1684, y = 49.3117, label = "Vancouver", color = "black", cex = 18) +
+  annotate("text", x = -123.169, y = 49.312, label = "Vancouver", color = "grey60", cex = 18) +
+  labs(subtitle = "Average traffic, by hour, out of each station in the Mobi network.",
+       caption = "Andrew Luyt, 2021  |  Source: Mobi public data") +
+  transition_states(hour, transition_length = 8, state_length = 1) +
+  ggtitle("Average Mobi station use, July 2021     Hour: {next_state}") +
+  shadow_wake(wake_length = 0.01,  wrap = TRUE) +
+  enter_fade() +
+  exit_fade()
+
+FPS = 20; W = 960; H = 660; DTL = 1; NFRAMES = 1*24*9 # bins per hour * 24 hours * frames/hour
+animate(plot = p, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
+```
+
+## TODO
+color or facet by membership, etc
+use a different type of map like the watercolor tiles so you can get
+a cool look AND stanley park?
+
+```{r animate traffic flow patterns by membership}
+
+SCALE = 0.01
+TMP_DF <- df %>%
+  filter(id_depart != id_return) %>%  # remove round trip
+  filter(membership == "365 Plus") %>% 
+  group_by(hour, id_depart) %>%
+  mutate(x = sum(delta_x),
+         y = sum(delta_y),
+         magnitude = (sqrt(x^2 + y^2))) %>%
+  ungroup() %>%
+  rowwise() %>%
+  mutate(angle = angle_from_x_axis(y,x)) %>%
+  ungroup() %>%
+  mutate(angle_group = cut_interval(angle, n = 4, labels = 1:4), # map coloring
+         magnitude = scales::rescale(magnitude, to = c(0,1))) %>%  # minmax 
+  group_by(hour, id_depart) %>% 
+  mutate(xend = lon_depart +  magnitude * cos(angle) * SCALE,
+         yend = lat_depart +  magnitude * sin(angle) * SCALE) %>% 
+  filter(abs(magnitude) >= 0.1) %>% # remove stations w/o distinct patterns
+  arrange(depart_time, desc(angle))
+
+
+TMP_DF %>%
+  ggplot(aes(x = lon_depart,
+             y = lat_depart,
+             xend = xend,
+             yend = yend,
+             color = angle_group,
+             group = id_depart
+         )) +
+  geom_sf(data = MAP, mapping = aes(), inherit.aes = FALSE) +
+  geom_segment(arrow = arrow(length = unit(0.01, "npc")), size=0.6) +
+  xlim(c(-123.2, -123.045)) +
+  ylim(c(49.245, 49.315)) 
+
+  transition_states(hour, transition_length = 3, state_length = 3) +
+  ggtitle("Averaged Mobi traffic flow    {next_state}") +
+  shadow_wake(wake_length = 0.01,  wrap = TRUE) +
+  enter_fade() +
+  exit_fade() 
+
+FPS = 30; W = 960; H = 660; DTL = 1; NFRAMES = 1*24*12 # bins per hour * 24 hours * ()
+animate(plot = p, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
+```
+
+
+```{r EDA, echo=FALSE, message=FALSE}
+# mean trip time, by membership type
+df %>%
+  filter(! is.na(membership)) %>%
+  group_by(membership) %>%
+  summarise(mean_trip_minutes = mean(trip_seconds) / 60) %>%
+  arrange(desc(mean_trip_minutes)) %>%
+  ggplot(aes(x=reorder(membership, mean_trip_minutes), mean_trip_minutes)) +
+  geom_col() +
+  coord_flip()
+
+# mean stopovers by membership
+# Look at "365 Day Founding Plus" !!!
+df %>%
+  filter(! is.na(membership)) %>%
+  group_by(membership) %>%
+  summarise(mean_stopovers = mean(n_stopovers)) %>%
+  arrange(desc(mean_stopovers)) %>%
+  ggplot(aes(x=reorder(membership, mean_stopovers), mean_stopovers)) +
+  geom_col() +
+  coord_flip()
+
+# distribution of stopovers by membership
+df %>%
+  filter(! is.na(membership)) %>%
+  filter(n_stopovers > 0) %>%
+  ggplot(aes(x=n_stopovers)) +
+  geom_density() +
+  facet_wrap(~membership)
+
+# mean trip time by departure hour
+# busy time is the end of, or immediately after, the workday: 5-7pm
+# morning use is WAY lower. Are people commuting one way?
+df %>%
+  ggplot(aes(trip_seconds/ 60)) +
+  geom_histogram()
+
+# mean trip time by return hour
+# busy time is still the end of, or immediately after, the workday: 5-7pm
+# Is this spike in trips a one-way commute FROM work TO home?
+# Do people do this because they don't want to be sweaty at work?
+df %>%
+  ggplot(aes(return_hour)) +
+  geom_bar()
+
+```
+
+
+
+
+
+
+
+
+
+
+
