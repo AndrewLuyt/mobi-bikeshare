@@ -27,7 +27,7 @@ animated.map <- function(
     yvar = quo(lat_return)
     xend_var = quo(xend_arriving)
     yend_var = quo(yend_arriving)
-    title = "Traffic arriving at Mobi bike stations, June-July 2021     Hour: {next_state}"
+    title = "Traffic arriving at Mobi bike stations     Hour: {next_state}"
     subtitle = "Arrows show the average direction of traffic into each station in the Mobi bike sharing system.\nDirection is averaged as a straight line from all start stations to end station.\nLonger arrows mean a stronger tendency for traffic to travel that direction."
   } else if (direction == "departing"){
     group_station <- quo(id_depart)
@@ -35,7 +35,7 @@ animated.map <- function(
     yvar = quo(lat_depart)
     xend_var = quo(xend_departing)
     yend_var = quo(yend_departing)
-    title = "Traffic departing from Mobi bike stations, June-July 2021     Hour: {next_state}"
+    title = "Traffic departing from Mobi bike stations     Hour: {next_state}"
     subtitle = "Arrows show the average direction of traffic out of each station in the Mobi bike sharing system.\nDirection is averaged as a straight line from all start stations to end station.\nLonger arrows mean a stronger tendency for traffic to travel that direction."
   } else {
     stop("Direction must be 'arriving' or 'departing'")
