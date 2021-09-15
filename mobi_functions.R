@@ -79,13 +79,13 @@ animated.map <- function(
           yend = !!yend_var,
           color = angle_group,
           alpha = nrides,
-          # size = nrides,
+          size = nrides,
           group = !!group_station)) +
     geom_sf(data = MAP, mapping = aes(), inherit.aes = FALSE, fill = MAP.FILL) +
     geom_sf(data = STANLEY_PARK, mapping = aes(), inherit.aes = FALSE, fill = MAP.FILL) +
-    geom_segment(size=1,
-                 arrow = arrow(length = unit(0.01, "npc"), type = "closed", ends = arrow.end)) +
+    geom_segment(arrow = arrow(length = unit(0.01, "npc"), type = "closed", ends = arrow.end)) +
     scale_alpha_continuous(range = c(0.5, 1)) +
+    scale_size_continuous(range = c(0.7, 1.5)) +
     xlim(c(-123.19, -123.050)) +
     ylim(c(49.245, 49.315)) +
     theme_map_dark +
@@ -95,7 +95,6 @@ animated.map <- function(
          caption = caption) +
     transition_states(hour, transition_length = transition_frames, state_length = state_frames) +
     ggtitle(title) +
-    shadow_wake(wake_length = 0.01,  wrap = TRUE) +
     enter_fade() +
     exit_fade()
 }
