@@ -49,7 +49,7 @@ LEAVE_DF <- df %>%
   # filter(magnitude >= 50) %>% # higher numbers make the map less cluttered
   arrange(depart_time, desc(angle))
 
-# create gganimation of traffic arriving at a Mobi station
+# Returns gganimation of traffic arriving at a Mobi station
 animated.map <- function(
   data,
   direction = "arriving",
@@ -60,7 +60,8 @@ animated.map <- function(
 ) {
   arrow.end <-  if (direction == "arriving") "first" else "last"
 
-  # quo() and !! (unquote) work together
+  # quo() and !! (unquote) work together to allow for selective use
+  # of variable names in %>% pipes %>%
   # See vignette("programming")
   if (direction == "arriving"){
     group_station <- quo(id_return)
@@ -68,7 +69,7 @@ animated.map <- function(
     yvar = quo(lat_return)
     xend_var = quo(xend_arriving)
     yend_var = quo(yend_arriving)
-    title = "Traffic arriving at bike stations, June-July 2021     Hour: {next_state}"
+    title = "Traffic arriving at Mobi bike stations, June-July 2021     Hour: {next_state}"
     subtitle = "Arrows show the average direction of traffic into each station in the Mobi bike sharing system.\nDirection is averaged as a straight line from all start stations to end station.\nLonger arrows mean a stronger tendency for traffic to travel that direction."
   } else if (direction == "departing"){
     group_station <- quo(id_depart)
@@ -76,7 +77,7 @@ animated.map <- function(
     yvar = quo(lat_depart)
     xend_var = quo(xend_departing)
     yend_var = quo(yend_departing)
-    title = "Traffic departing from bike stations, June-July 2021     Hour: {next_state}"
+    title = "Traffic departing from Mobi bike stations, June-July 2021     Hour: {next_state}"
     subtitle = "Arrows show the average direction of traffic out of each station in the Mobi bike sharing system.\nDirection is averaged as a straight line from all start stations to end station.\nLonger arrows mean a stronger tendency for traffic to travel that direction."
   } else {
     stop("Direction must be 'arriving' or 'departing'")
@@ -103,7 +104,7 @@ animated.map <- function(
            xend_arriving = lon_return - x * arrow.scale,
            yend_arriving = lat_return - y * arrow.scale,
            xend_departing = lon_depart + x * arrow.scale,
-           yend_departing = lat_depart + x * arrow.scale) %>%
+           yend_departing = lat_depart + y * arrow.scale) %>%
     ungroup() %>%
     # bin angles into 4 quadrants for colouring
     mutate(angle_group = cut_interval(angle, n = 4, labels = 1:4))
@@ -140,5 +141,5 @@ animated.map <- function(
     exit_fade()
 }
 
-p <- animated.map(df, direction = "departing")
-p
+# p <- animated.map(df, direction = "departing")
+# p
