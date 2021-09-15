@@ -1,8 +1,3 @@
-library(tidyverse)
-library(lubridate)
-library(sf)
-library(gganimate)
-library(viridis)
 
 MAP.FILL = "gray20"
 
@@ -12,12 +7,15 @@ MAP.FILL = "gray20"
 animated.map <- function(
   data,
   direction = "arriving",
+  title.override = NULL,
   caption = "Andrew Luyt, 2021  |  Source: Mobi public data",
   transition_frames = 8,
   state_frames = 1,
-  arrow.scale = 0.003
+  arrow.scale = 1
 ) {
   arrow.end <-  if (direction == "arriving") "first" else "last"
+  base.arrow.scale = 0.003
+  arrow.scale <- arrow.scale * base.arrow.scale
 
   # quo() and !! (unquote) work together to allow for selective use
   # of variable names in %>% pipes %>%. See vignette("programming")
@@ -43,11 +41,10 @@ animated.map <- function(
     stop("Direction must be 'arriving' or 'departing'")
   }
 
+  if (is.character(title.override)) title = title.override
+
   # calculate vectors - slightly different for leaving vs arriving
   TMP_DF <- data %>%
-    filter(month(depart_time) %in% 6:7,
-           #membership %in% c("365 Day Founding Plus", "365 Plus"),
-           id_depart != id_return) %>%  # remove round trips
     group_by(hour, !!group_station) %>%
     summarise(x = sum(lon_return - lon_depart),
               y = sum(lat_return - lat_depart),
@@ -74,8 +71,6 @@ animated.map <- function(
     ggplot(
       aes(x = !!xvar,
           y = !!yvar,
-          # xend = if (direction == "arriving") lon_return - x * arrow.scale else lon_depart + x * arrow.scale,
-          # yend = if (direction == "arriving") lat_return - y * arrow.scale else lat_depart + x * arrow.scale,
           xend = !!xend_var,
           yend = !!yend_var,
           color = angle_group,
@@ -84,9 +79,9 @@ animated.map <- function(
           group = !!group_station)) +
     geom_sf(data = MAP, mapping = aes(), inherit.aes = FALSE, fill = MAP.FILL) +
     geom_sf(data = STANLEY_PARK, mapping = aes(), inherit.aes = FALSE, fill = MAP.FILL) +
-    geom_segment(size=0.7,
+    geom_segment(size=1,
                  arrow = arrow(length = unit(0.01, "npc"), type = "closed", ends = arrow.end)) +
-    scale_alpha_continuous(range = c(0.4, 1)) +
+    scale_alpha_continuous(range = c(0.5, 1)) +
     # scale_size_continuous(range = c(0.4, 0.7)) +
     xlim(c(-123.19, -123.050)) +
     ylim(c(49.245, 49.315)) +
