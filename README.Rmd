@@ -1,5 +1,5 @@
 ---
-title: 'Case Study: Mobi Bikeshare in Vancouver'
+title: 'Work in Progress: Case Study: Mobi Bikeshare in Vancouver'
 author: "Andrew Luyt"
 date: "07/07/2021"
 output: github_document

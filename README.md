@@ -1,4 +1,4 @@
-Case Study: Mobi Bikeshare in Vancouver
+Work in Progress: Case Study: Mobi Bikeshare in Vancouver
 ================
 Andrew Luyt
 07/07/2021
@@ -43,6 +43,19 @@ TBD, but some ideas:
     -   are people primarily commuting, or running errands with a
         stopover?
         -   what’s the distribution?
+-   can you identify commutes, errands, and pleasure rides?
+    -   commutes are probably from one station to a different one, no
+        stopovers
+    -   errands are probably from one station to the same station, with
+        a stopover
+    -   pleasure trips are probably like errands but with 0 stopovers
+    -   do these categories form clear patterns in the data?
+        -   how could you verify these observations if they are there?
+            -   is there a usage survey that says how the mobi
+                membership USES their bikes?
+            -   are there patterns visible on the map?
+            -   are there **time** or **place** (departure/arrival)
+                patterns correlated with each usage group?
 -   bicycle attrition?
     -   the `bike` column seems to record a unique bike ID - does it?
     -   how long do bikes last? do they disappear from the dataset?
