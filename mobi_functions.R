@@ -1,12 +1,16 @@
 
 MAP.FILL = "gray20"
 
-# Returns gganimation of traffic arriving at a Mobi station.
+# Returns gganimation of traffic arriving at or departing from a Mobi station.
+# Each trip is treated as a vector, and the vectors grouped by station and
+# added to create an overall traffic vector. The idea is to visualize patterns
+# in where people are going TO (when starting at station X) or coming FROM
+# (when arriving at station X.)
 # Intended to be called only in analyze_mobi.Rmd, this is not a
 # very general function, just a convenience.
 animated.map <- function(
   data,
-  direction = "arriving",
+  direction = "departing",
   title.override = NULL,
   caption = "Andrew Luyt, 2021  |  Source: Mobi public data",
   transition_frames = 8,
@@ -82,7 +86,6 @@ animated.map <- function(
     geom_segment(size=1,
                  arrow = arrow(length = unit(0.01, "npc"), type = "closed", ends = arrow.end)) +
     scale_alpha_continuous(range = c(0.5, 1)) +
-    # scale_size_continuous(range = c(0.4, 0.7)) +
     xlim(c(-123.19, -123.050)) +
     ylim(c(49.245, 49.315)) +
     theme_map_dark +
