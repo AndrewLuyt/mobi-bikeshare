@@ -6,50 +6,9 @@ library(viridis)
 
 MAP.FILL = "gray20"
 
-# for testing
-ARRIVE_DF <- df %>%
-  filter(month(depart_time) %in% 6:7,
-         #membership %in% c("365 Day Founding Plus", "365 Plus"),
-         id_depart != id_return) %>%  # remove round trips
-  group_by(hour, id_return) %>%
-  summarise(x = sum(lon_return - lon_depart),
-            y = sum(lat_return - lat_depart),
-            nrides = n(),
-            lon_depart = first(lon_depart),
-            lat_depart = first(lat_depart),
-            lon_return = first(lon_return),
-            lat_return = first(lat_return)) %>%
-  ungroup() %>%
-  rowwise() %>%
-  mutate(angle = angle_from_x_axis(y,x)) %>%
-  ungroup() %>%
-  # bin angles into 4 quadrants for colouring
-  mutate(angle_group = cut_interval(angle, n = 4, labels = 1:4)) %>%
-  # filter(magnitude >= 50) %>% # higher numbers make the map less cluttered
-  arrange(hour, desc(angle))
-
-LEAVE_DF <- df %>%
-  filter(month(depart_time) %in% 6:7,
-         #membership %in% c("365 Day Founding Plus", "365 Plus"),
-         id_depart != id_return) %>%  # remove round trips
-  group_by(hour, id_depart) %>%
-  summarise(x = sum(lon_return - lon_depart),
-            y = sum(lat_return - lat_depart),
-            nrides = n(),
-            lon_depart = first(lon_depart),
-            lat_depart = first(lat_depart),
-            lon_return = first(lon_return),
-            lat_return = first(lat_return)) %>%
-  ungroup() %>%
-  rowwise() %>%
-  mutate(angle = angle_from_x_axis(y,x)) %>%
-  ungroup() %>%
-  # bin angles into 4 quadrants for colouring
-  mutate(angle_group = cut_interval(angle, n = 4, labels = 1:4)) %>%
-  # filter(magnitude >= 50) %>% # higher numbers make the map less cluttered
-  arrange(depart_time, desc(angle))
-
-# Returns gganimation of traffic arriving at a Mobi station
+# Returns gganimation of traffic arriving at a Mobi station.
+# Intended to be called only in analyze_mobi.Rmd, this is not a
+# very general function, just a convenience.
 animated.map <- function(
   data,
   direction = "arriving",
@@ -61,8 +20,9 @@ animated.map <- function(
   arrow.end <-  if (direction == "arriving") "first" else "last"
 
   # quo() and !! (unquote) work together to allow for selective use
-  # of variable names in %>% pipes %>%
-  # See vignette("programming")
+  # of variable names in %>% pipes %>%. See vignette("programming")
+  #
+  # Set up variables and *titles
   if (direction == "arriving"){
     group_station <- quo(id_return)
     xvar = quo(lon_return)
@@ -109,6 +69,7 @@ animated.map <- function(
     # bin angles into 4 quadrants for colouring
     mutate(angle_group = cut_interval(angle, n = 4, labels = 1:4))
 
+  # create animation
   p <- TMP_DF %>%
     ggplot(
       aes(x = !!xvar,
@@ -140,6 +101,3 @@ animated.map <- function(
     enter_fade() +
     exit_fade()
 }
-
-# p <- animated.map(df, direction = "departing")
-# p
