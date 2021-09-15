@@ -20,6 +20,8 @@ library(sf)         # Vancouver map
 library(gganimate)
 library(viridis)
 
+source("mobi_functions.R")
+
 RIDES = "data/mobi_rides.Rdata"
 if(file.exists(RIDES)) {
   load(RIDES)
@@ -54,6 +56,20 @@ angle_from_x_axis <- function(y,x) {
 }
 
 ```
+
+```{r subset df to june and july}
+# df <- df %>% 
+#   filter(month(depart_time) %in% c(6,7))
+```
+
+```{r determine which membership classes have been used recently}
+df %>% 
+  group_by(membership) %>% 
+  summarise(most_recent_use = max(depart_time)) %>% 
+  arrange(most_recent_use)
+```
+
+So the first four seem to be no longer used in the system.
 
 ```{r theming}
 default_theme <- theme_set(theme_bw())
@@ -112,10 +128,12 @@ the most popular memberships. Two of these popular memberships, the
 ```{r}
 popular_memberships <- df %>% 
   group_by(membership) %>% 
-  summarise(n = n()) %>% 
+  tally() %>% 
   filter(n > 9000) %>% 
+  arrange(desc(n)) %>% 
   pull(membership)
 popular_memberships <- popular_memberships[1:8]
+popular_memberships <- as.factor(as.character(popular_memberships))
 ```
 
 
@@ -285,112 +303,47 @@ people who regularly need more time on their rides.
 Let's look deeper into these *founding plus* members - are there any notable
 geographic patterns?
 
-```{r animate 365 plus and founding plus rides}
-TMP_DF <- df %>% 
+```{r departing traffic by 365 plus and founding plus}
+anim <- df %>% 
   filter(membership %in% c("365 Day Founding Plus", "365 Plus"), 
          id_depart != id_return) %>%  # remove round trips
-  group_by(hour, id_depart) %>%
-  mutate(x = sum(lon_return - lon_depart),
-         y = sum(lat_return - lat_depart),
-         nrides = n()) %>%
-  ungroup() %>%
-  rowwise() %>%
-  mutate(angle = angle_from_x_axis(y,x)) %>%
-  ungroup() %>%
-  # bin angles into 4 quadrants for colouring
-  mutate(angle_group = cut_interval(angle, n = 4, labels = 1:4)) %>%  
-  # filter(magnitude >= 50) %>% # higher numbers make the map less cluttered
-  arrange(hour, desc(angle))
-
-SCALE = 0.004
-p <- TMP_DF %>%
-  filter(month(depart_time) %in% 6:7) %>% 
-         # wday(depart_time, week_start =  1) %in% 1:5) %>%  # weekdays only
-  ggplot(aes(x = lon_depart,
-             y = lat_depart,
-             xend = lon_depart + x * SCALE,
-             yend = lat_depart + y * SCALE,
-             color = angle_group,
-             alpha = nrides,
-             # size = nrides,
-             group = id_depart)) +
-  geom_sf(data = MAP, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
-  geom_sf(data = STANLEY_PARK, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
-  geom_segment(arrow = arrow(length = unit(0.007, "npc"), type = "closed"), size=0.7) +
-  scale_alpha_continuous(range = c(0.4, 1)) +
-  # scale_size_continuous(range = c(0.4, 0.7)) +
-  xlim(c(-123.19, -123.050)) +
-  ylim(c(49.245, 49.315)) +
-  theme_map_dark +
-  annotate("text", x = -123.1684, y = 49.3117, label = "Vancouver", color = "black", cex = 18) +
-  annotate("text", x = -123.169, y = 49.312, label = "Vancouver", color = "grey60", cex = 18) +
-  labs(subtitle = "Arrows show the average direction of traffic out of each station in the Mobi bike sharing system.\nDirection is measured as a straight line from start station to end station.\nLonger arrows mean a stronger tendency for traffic to travel that direction.",
-       caption = "Andrew Luyt, 2021  |  Source: Mobi public data") +
-  transition_states(hour, transition_length = 8, state_length = 1) +
-  ggtitle("365 Day Plus & Founding Plus bicycle traffic, June-July 2021     Hour: {next_state}") +
-  shadow_wake(wake_length = 0.01,  wrap = TRUE) +
-  enter_fade() +
-  exit_fade() 
+  animated.map(direction = "departing",
+               title = "Traffic departing from Mobi bike stations, June-July 2021     Hour: {next_state}\n365 Plus and 365 Founding Plus only")
 
 FPS = 20; W = 960; H = 660; DTL = 1; NFRAMES = 1*24*9 # bins per hour * 24 hours * frames/hour
-animate(plot = p, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
+animate(plot = anim, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
 ```
 
-## Animating on ENDING stations
 for 365 plus/founding, the animation wasn't insightful. The trends were
-very weak. For all memberships, the trends were
+very weak.
 
-```{r animate traffic into ending stations by all members}
-TMP_DF <- df %>%
-  filter(month(depart_time) %in% 6:7,
-         #membership %in% c("365 Day Founding Plus", "365 Plus"), 
-         id_depart != id_return) %>%  # remove round trips
-  group_by(hour, id_return) %>%
-  summarise(x = sum(lon_return - lon_depart),
-            y = sum(lat_return - lat_depart),
-            nrides = n(),
-            lon_return = first(lon_return),
-            lat_return = first(lat_return)) %>%
-  ungroup() %>%
-  rowwise() %>%
-  mutate(angle = angle_from_x_axis(y,x)) %>%
-  ungroup() %>%
-  # bin angles into 4 quadrants for colouring
-  mutate(angle_group = cut_interval(angle, n = 4, labels = 1:4)) %>%  
-  # filter(magnitude >= 50) %>% # higher numbers make the map less cluttered
-  arrange(hour, desc(angle))
 
-SCALE = 0.004
-p <- TMP_DF %>%
-  ggplot(aes(x = lon_return,
-             y = lat_return,
-             xend = lon_return - x * SCALE,
-             yend = lat_return - y * SCALE,
-             color = angle_group,
-             alpha = nrides,
-             # size = nrides,
-             group = id_return)) +
-  geom_sf(data = MAP, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
-  geom_sf(data = STANLEY_PARK, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
-  geom_segment(arrow = arrow(length = unit(0.007, "npc"), type = "closed", ends = "first"), size=0.7) +
-  scale_alpha_continuous(range = c(0.4, 1)) +
-  # scale_size_continuous(range = c(0.4, 0.7)) +
-  xlim(c(-123.19, -123.050)) +
-  ylim(c(49.245, 49.315)) +
-  theme_map_dark +
-  annotate("text", x = -123.1684, y = 49.3117, label = "Vancouver", color = "black", cex = 18) +
-  annotate("text", x = -123.169, y = 49.312, label = "Vancouver", color = "grey60", cex = 18) +
-  labs(subtitle = "Arrows show the average direction of traffic into each station in the Mobi bike sharing system.\nDirection is averaged as a straight line from all start stations to end station.\nLonger arrows mean a stronger tendency for traffic to travel that direction.",
-       caption = "Andrew Luyt, 2021  |  Source: Mobi public data") +
-  transition_states(hour, transition_length = 8, state_length = 1) +
-  ggtitle("Traffic ending at bike stations, June-July 2021     Hour: {next_state}") +
-  shadow_wake(wake_length = 0.01,  wrap = TRUE) +
-  enter_fade() +
-  exit_fade() 
+## All stations
+All traffic departing from / arriving at stations, averaged out.
+
+```{r departing traffic by all members}
+anim <- df %>% 
+  filter(id_depart != id_return) %>% 
+  animated.map(direction = "departing", arrow.scale = 0.25)
 
 FPS = 20; W = 960; H = 660; DTL = 1; NFRAMES = 1*24*9 # bins per hour * 24 hours * frames/hour
-animate(plot = p, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
+animate(plot = anim, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
 ```
+
+The easternmost station in Stanley Park with the huge westward signal is
+station 105, "Stanley Park - Totem Poles". This probably represents people
+riding the seawall in the legal direction and dropping off their bike at the 
+Second Beach station at the west side of the park.
+
+```{r arriving traffic by all members}
+anim <- df %>% 
+  filter(id_depart != id_return) %>% 
+  animated.map(direction = "arriving", arrow.scale = 0.25)
+
+FPS = 20; W = 960; H = 660; DTL = 1; NFRAMES = 1*24*9 # bins per hour * 24 hours * frames/hour
+animate(plot = anim, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
+```
+
 
 Most 60-minute-limit traffic averages out to traveling in to downtown, centered
 on the districts east of Granville Street. Later, we'll examine
@@ -399,16 +352,6 @@ all bike traffic and see it shows a similar pattern.
 In [https://andrewluyt.github.io/divvy-bikeshare/](a previous analysis of the Divvy bikeshare) 
 in Chicago, I found similar bike traffic: most traffic flowed from the outlying
 districts towards a central core of high activity.
-
-```{r}
-df %>% 
-  filter(membership %in% popular_memberships) %>% 
-  group_by(membership) %>% 
-  # summarise(n = n()) %>% 
-  filter(n_stopovers > 0) %>% 
-  ggplot(aes(n_stopovers, n, color = membership)) +
-  geom_line(method = "lm")
-```
 
 
 ```{r look for patterns in sum by hour}
@@ -456,96 +399,25 @@ df %>%
 
 
 
-```{r create hourly vectors}
 
-TMP_DF <- df %>%
-  filter(id_depart != id_return) %>%  # remove round trips
-  group_by(hour, id_depart) %>%
-  mutate(x = sum(lon_return - lon_depart),
-         y = sum(lat_return - lat_depart),
-         nrides = n()) %>%
-  ungroup() %>%
-  rowwise() %>%
-  mutate(angle = angle_from_x_axis(y,x)) %>%
-  ungroup() %>%
-  # bin angles into 4 quadrants for colouring
-  mutate(angle_group = cut_interval(angle, n = 4, labels = 1:4)) %>%  
-  # filter(magnitude >= 50) %>% # higher numbers make the map less cluttered
-  arrange(depart_time, desc(angle))
-```
-
-```{r create static vector map}
-SCALE = 0.004
-SCALE = 0.002
-
-TMP_DF %>% 
-  filter(hour == 8, month(depart_time) == 7,
-         wday(depart_time, week_start =  1) %in% 1:5) %>% 
-  ggplot(aes(x = lon_depart,
-             y = lat_depart,
-             xend = lon_depart + x * SCALE,
-             yend = lat_depart + y * SCALE,
-             color = angle_group,
-             group = id_depart)) +
-  geom_sf(data = MAP, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
-  geom_sf(data = STANLEY_PARK, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
-  geom_point(aes(fill = nrides, size = nrides), pch = 21, color = 'black') +
-  geom_segment(arrow = arrow(length = unit(0.01, "npc")), size=0.6) +
-  scale_fill_viridis(option = "plasma") +
-  xlim(c(-123.19, -123.050)) +
-  ylim(c(49.245, 49.315)) +
-  theme_map_dark +
-    annotate("text", x = -123.1684, y = 49.3114, label = "Vancouver", color = "black", cex = 18) +
-  annotate("text", x = -123.169, y = 49.312, label = "Vancouver", color = "grey60", cex = 18) +
-    annotate("text", x = -123.06, y = 49.3114, label = "🚲", color = "black", cex = 30) +
-
-  ggtitle("Average Mobi traffic direction by the hour, July 2021   {next_state}")
-```
-
-The easternmost station in Stanley Park with the huge westward signal is
-station 105, "Stanley Park - Totem Poles". This probably represents people
-riding the seawall in the legal direction and dropping off their bike at the 
-Second Beach station at the west side of the park.
 
 ## TODO: separate weekday & weekend
-### Consider nrides scaling the size of the arrows (thicker = busier) or alpha
+## TODO: animate short vs long rides
+## TODO: animate all individual rides as thin arrows.
+might have to limit to a day, or an hour in one day.
 
-## TODO: traffic coming IN to stations. arrow(ends = 'first' ?)
-
-```{r animate traffic flow patterns}
-SCALE = 0.0008
-p <- TMP_DF %>%
-  filter(month(depart_time) %in% 6:7) %>% 
-         # wday(depart_time, week_start =  1) %in% 1:5) %>%  # weekdays only
-  ggplot(aes(x = lon_depart,
-             y = lat_depart,
-             xend = lon_depart + x * SCALE,
-             yend = lat_depart + y * SCALE,
-             color = angle_group,
-             alpha = nrides,
-             # size = nrides,
-             group = id_depart)) +
-  geom_sf(data = MAP, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
-  geom_sf(data = STANLEY_PARK, mapping = aes(), inherit.aes = FALSE, fill = 'gray20') +
-  geom_segment(arrow = arrow(length = unit(0.007, "npc"), type = "closed"), size=0.7) +
-  scale_alpha_continuous(range = c(0.4, 1)) +
-  # scale_size_continuous(range = c(0.4, 0.7)) +
-  xlim(c(-123.19, -123.050)) +
-  ylim(c(49.245, 49.315)) +
-  theme_map_dark +
-  annotate("text", x = -123.1684, y = 49.3117, label = "Vancouver", color = "black", cex = 18) +
-  annotate("text", x = -123.169, y = 49.312, label = "Vancouver", color = "grey60", cex = 18) +
-  labs(subtitle = "Arrows show the average direction of traffic out of each station in the Mobi bike sharing system.\nDirection is measured as a straight line from start station to end station.\nLonger arrows mean a stronger tendency for traffic to travel that direction.",
-       caption = "Andrew Luyt, 2021  |  Source: Mobi public data") +
-  transition_states(hour, transition_length = 8, state_length = 1) +
-  ggtitle("Mobi bicycle traffic, June-July 2021     Hour: {next_state}") +
-  shadow_wake(wake_length = 0.01,  wrap = TRUE) +
-  enter_fade() +
-  exit_fade() 
+```{r departing traffic flow 30 day pass}
+anim <- df %>% 
+  filter(id_depart != id_return,
+         membership == "30 Day Pass") %>% 
+  animated.map(direction = "departing", arrow.scale = 1,
+               title.override = "30 Day Pass Traffic")
 
 FPS = 20; W = 960; H = 660; DTL = 1; NFRAMES = 1*24*9 # bins per hour * 24 hours * frames/hour
-animate(plot = p, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
+animate(plot = anim, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
 ```
+
+
 
 ```{r create hourly volume map}
 
