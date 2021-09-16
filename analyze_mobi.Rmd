@@ -324,10 +324,13 @@ All traffic departing from / arriving at stations, averaged out.
 ```{r departing traffic by all members}
 anim <- df %>% 
   filter(id_depart != id_return) %>% 
-  animated.map(direction = "departing", arrow.scale = 0.25)
+  animated.map(direction = "departing", arrow.scale = 0.25, transition_frames = 10, state_frames = 1)
 
-FPS = 20; W = 960; H = 660; DTL = 1; NFRAMES = 1*24*9 # bins per hour * 24 hours * frames/hour
+FPS = 30; W = 780; H = 660; DTL = 2; S = paste0(W,"x",H); NFRAMES = 1*24*11 # bins per hour * 24 hours * frames/hour
 animate(plot = anim, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
+# anim_save("img/mobi_30fps_traffic_vectors.mp4", anim, fps = FPS, nframes = NFRAMES,
+#           width=W, height=H, detail=DTL,
+#           renderer = ffmpeg_renderer(options = list(s = S, b = "1200k")))
 ```
 
 The easternmost station in Stanley Park with the huge westward signal is
@@ -340,7 +343,7 @@ anim <- df %>%
   filter(id_depart != id_return) %>% 
   animated.map(direction = "arriving", arrow.scale = 0.25)
 
-FPS = 20; W = 960; H = 660; DTL = 1; NFRAMES = 1*24*9 # bins per hour * 24 hours * frames/hour
+FPS = 30; W = 780; H = 660; DTL = 2; S = paste0(W,"x",H); NFRAMES = 1*24*11 # bins per hour * 24 hours * frames/hour
 animate(plot = anim, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
 ```
 
@@ -465,54 +468,9 @@ animate(plot = p, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
 
 ## TODO
 color or facet by membership, etc
+
 use a different type of map like the watercolor tiles so you can get
-a cool look AND stanley park?
-
-```{r animate traffic flow patterns by membership}
-
-SCALE = 0.01
-TMP_DF <- df %>%
-  filter(id_depart != id_return) %>%  # remove round trip
-  filter(membership == "365 Plus") %>% 
-  group_by(hour, id_depart) %>%
-  mutate(x = sum(delta_x),
-         y = sum(delta_y),
-         magnitude = (sqrt(x^2 + y^2))) %>%
-  ungroup() %>%
-  rowwise() %>%
-  mutate(angle = angle_from_x_axis(y,x)) %>%
-  ungroup() %>%
-  mutate(angle_group = cut_interval(angle, n = 4, labels = 1:4), # map coloring
-         magnitude = scales::rescale(magnitude, to = c(0,1))) %>%  # minmax 
-  group_by(hour, id_depart) %>% 
-  mutate(xend = lon_depart +  magnitude * cos(angle) * SCALE,
-         yend = lat_depart +  magnitude * sin(angle) * SCALE) %>% 
-  filter(abs(magnitude) >= 0.1) %>% # remove stations w/o distinct patterns
-  arrange(depart_time, desc(angle))
-
-
-TMP_DF %>%
-  ggplot(aes(x = lon_depart,
-             y = lat_depart,
-             xend = xend,
-             yend = yend,
-             color = angle_group,
-             group = id_depart
-         )) +
-  geom_sf(data = MAP, mapping = aes(), inherit.aes = FALSE) +
-  geom_segment(arrow = arrow(length = unit(0.01, "npc")), size=0.6) +
-  xlim(c(-123.2, -123.045)) +
-  ylim(c(49.245, 49.315)) 
-
-  transition_states(hour, transition_length = 3, state_length = 3) +
-  ggtitle("Averaged Mobi traffic flow    {next_state}") +
-  shadow_wake(wake_length = 0.01,  wrap = TRUE) +
-  enter_fade() +
-  exit_fade() 
-
-FPS = 30; W = 960; H = 660; DTL = 1; NFRAMES = 1*24*12 # bins per hour * 24 hours * ()
-animate(plot = p, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
-```
+a cool look?
 
 
 ```{r EDA, echo=FALSE, message=FALSE}
@@ -563,6 +521,17 @@ df %>%
 ```
 
 
+```{r}
+df %>% 
+  mutate(day = as_date(depart_time)) %>% 
+  filter(between(day, max(day) - 365, max(day) - 1)) %>% 
+  group_by(day) %>%
+  tally() %>% 
+  ggplot(aes(day, n)) +
+  geom_line() +
+  labs(title = "Daily trip volume")
+    
+```
 
 
 

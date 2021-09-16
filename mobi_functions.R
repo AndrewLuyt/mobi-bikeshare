@@ -32,7 +32,7 @@ animated.map <- function(
     xend_var = quo(xend_arriving)
     yend_var = quo(yend_arriving)
     title = "Traffic arriving at Mobi bike stations     Hour: {next_state}"
-    subtitle = "Arrows show the average direction of traffic into each station in the Mobi bike sharing system.\nDirection is averaged as a straight line from all start stations to end station.\nLonger arrows mean a stronger tendency for traffic to travel that direction."
+    subtitle = "Arrows show the average direction of traffic into each station in the Mobi bike sharing system.\nDirection is averaged as a straight line from start station to end station.\nLonger arrows mean a stronger tendency for traffic to arrive from that direction."
   } else if (direction == "departing"){
     group_station <- quo(id_depart)
     xvar = quo(lon_depart)
@@ -40,7 +40,7 @@ animated.map <- function(
     xend_var = quo(xend_departing)
     yend_var = quo(yend_departing)
     title = "Traffic departing from Mobi bike stations     Hour: {next_state}"
-    subtitle = "Arrows show the average direction of traffic out of each station in the Mobi bike sharing system.\nDirection is averaged as a straight line from all start stations to end station.\nLonger arrows mean a stronger tendency for traffic to travel that direction."
+    subtitle = "Arrows show the average direction of traffic out of each station in the Mobi bike sharing system.\nDirection is averaged as a straight line from start station to end station.\nLonger arrows mean a stronger tendency for traffic to travel to a destination in that direction."
   } else {
     stop("Direction must be 'arriving' or 'departing'")
   }
@@ -84,8 +84,8 @@ animated.map <- function(
     geom_sf(data = MAP, mapping = aes(), inherit.aes = FALSE, fill = MAP.FILL) +
     geom_sf(data = STANLEY_PARK, mapping = aes(), inherit.aes = FALSE, fill = MAP.FILL) +
     geom_segment(arrow = arrow(length = unit(0.01, "npc"), type = "closed", ends = arrow.end)) +
-    scale_alpha_continuous(range = c(0.5, 1)) +
-    scale_size_continuous(range = c(0.7, 1.5)) +
+    scale_alpha_continuous(range = c(0.4, 1)) +
+    scale_size_continuous(range = c(0.7, 1.7)) +
     xlim(c(-123.19, -123.050)) +
     ylim(c(49.245, 49.315)) +
     theme_map_dark +
