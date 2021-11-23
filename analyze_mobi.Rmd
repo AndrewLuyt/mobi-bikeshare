@@ -275,13 +275,14 @@ df %>%
   group_by(membership, n_stopovers) %>%
   ggplot(aes(x = n_stopovers, fill = membership)) +
   geom_bar(position = "fill") +
-  labs(title = "Proportions of memberships that stop n times during a ride",
+  labs(title = "Which members are taking a stopover during a ride?",
        subtitle = "As the number of stopovers increases, it becomes more likely the rider has a\n365 Day Founding Plus Pass",
-       y = "Proportion", x = "Stopovers") +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 15))
+       y = "", x = "Stopovers") +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 15)) +
+  scale_y_continuous(labels = scales::percent)
 ```
 
-**365 Day Founding Plus** dominates the crowd that stops at a location during their
+**365 Day Founding Plus** members make up most of the users that stop at a location during their
 ride. **365 Day Plus** is in second place.  These both offer a notable clause in
 their [https://www.mobibikes.ca/en/terms-and-conditions-use](agreements.) 
 Most memberships offer 30 minutes of riding, after which
@@ -327,10 +328,17 @@ anim <- df %>%
   animated.map(direction = "departing", arrow.scale = 0.25, transition_frames = 10, state_frames = 1)
 
 FPS = 30; W = 780; H = 660; DTL = 2; S = paste0(W,"x",H); NFRAMES = 1*24*11 # bins per hour * 24 hours * frames/hour
-animate(plot = anim, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
-# anim_save("img/mobi_30fps_traffic_vectors.mp4", anim, fps = FPS, nframes = NFRAMES,
+FPS = 30; W = 1080; H = 1080; DTL = 2; S = paste0(W,"x",H); NFRAMES = 1*24*11 # bins per hour * 24 hours * frames/hour
+# animate(plot = anim, fps = FPS, nframes = NFRAMES, detail=DTL, width=W, height=H)
+# anim_save("img/mobi_30fps_traffic_vectors_vp9.mp4", anim, fps = FPS, nframes = NFRAMES,
+#           width=W, height=H, detail=DTL, 
+#           renderer = ffmpeg_renderer(options = list(s = S, `b:v` = "1200k", f = "mp4", `c:v` = "libvpx-vp9")))
+anim_save("img/mobi_30fps_traffic_vectors_vp8.mp4", anim, fps = FPS, nframes = NFRAMES,
+          width=W, height=H, detail=DTL, 
+          renderer = ffmpeg_renderer(options = list(s = S, `b:v` = "1200k", f = "webm", `c:v` = "libvpx")))
+# anim_save("img/mobi_30fps_traffic_vectors_h264.mp4", anim, fps = FPS, nframes = NFRAMES,
 #           width=W, height=H, detail=DTL,
-#           renderer = ffmpeg_renderer(options = list(s = S, b = "1200k")))
+#           renderer = ffmpeg_renderer(options = list(s = S, `b:v` = "1200k", f = "mp4", `c:v` = "libx264")))
 ```
 
 The easternmost station in Stanley Park with the huge westward signal is
