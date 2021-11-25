@@ -16,7 +16,6 @@ library(tidyverse)
 library(lubridate)
 library(geosphere)  # for distGeo()
 library(sf)         # for plotting maps
-library(gganimate)
 
 SHAPEDATA <- "data/local-area-boundary.geojson"
 
@@ -28,11 +27,13 @@ df <-
              full.names = TRUE) %>%
   map_df(~fread(
     .,
-    stringsAsFactors = TRUE,
+    stringsAsFactors = FALSE,
     col.names = c('depart_time','return_time','bike','station_depart',
                   'station_return','membership','trip_distance','trip_seconds',
                   'voltage_depart_mv','voltage_return_mv','temp_depart',
                   'temp_return','stopover_seconds','n_stopovers'))) %>%
+  filter(return_time != "",         # remove corrupt records
+         stringr::str_sub(return_time, -7, -6) != "00") %>%
   mutate(depart_time = ymd_hm(depart_time),
          return_time = ymd_hm(return_time),
          wday = lubridate::wday(depart_time, label = TRUE, abbr = TRUE),
