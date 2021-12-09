@@ -57,9 +57,49 @@ angle_from_x_axis <- function(y,x) {
 
 ```
 
-```{r subset df to june and july}
-# df <- df %>% 
-#   filter(month(depart_time) %in% c(6,7))
+Hierarchical clustering of features suggests `trip_distance` is a feature very 
+different from the others. `bike` is an ID for a specific bike.
+
+```{r dendrogram for june and july}
+x <- df %>%
+  filter(month(depart_time) %in% c(6,7)) %>% 
+  select(where(is.numeric)) %>% 
+  slice_sample(n = 20000) # out of about 190,000 observations
+plot(hclust(dist(scale(t(x)))))
+
+```
+
+
+For fun, create principal components and plot the first three to see if rides
+are easily seperable.  PC3 will be used for colouring.  We see the hints of some
+structure, with rides separating into two overlapping groups. It's worth noting
+that PC1 - PC3 account for only 45% of variation, so much more separation is
+possible.
+
+```{r principal components separation}
+# Define colour pallete
+pal = colorRampPalette(c(rgb(0,0,.5,.2), rgb(.8,0,0,.2)), alpha=TRUE)
+ 
+# Rank variable for colour assignment
+colorVals = rank(x[, 3])
+
+pc <- prcomp(scale(x))
+summary(pc)
+plot(pc$x[, 1], pc$x[, 2], pch=19, col=pal(nrow(x))[colorVals])
+smoothScatter(pc$x[, 1], pc$x[, 2])
+```
+
+Similar to what we did with hierarchical clustering, plotting principal
+components for *features* again suggests that `trip_distance` and `bike` are
+particularly different features, while the others tend to group together.
+It's worth recalling we skipped the categorical features rather than trying
+to find a useful encoding scheme for them.
+```{r }
+pc <- prcomp(scale(t(as.matrix(x))))
+summary(pc)
+plot(pc$x[, 1], pc$x[, 2], pch=19, col=pal(nrow(x))[colorVals], 
+     xlim = c(min(pc$x[, 1]) * 1.1, max(pc$x[, 1]) * 1.1))
+text(pc$x[, 1], pc$x[, 2], label=names(x), )
 ```
 
 ```{r determine which membership classes have been used recently}
@@ -237,7 +277,7 @@ riding immediately to a desination and then docking the bike. Only a comparative
 few stop somewhere along the way. Let's examine *only* those trips with at least
 1 stopover.
 
-```{r number of stopovers by membership totals only with stopovers}
+```{r number of stopovers by membership totals 2}
 df %>% 
   filter(membership %in% popular_memberships,
          n_stopovers > 0) %>%
@@ -252,7 +292,7 @@ df %>%
 Rides with one stopover have a broad distribution of memberships.
 How about 2 or more stopovers?
 
-```{r number of stopovers by membership totals only with stopovers}
+```{r number of stopovers by membership totals 3}
 df %>% 
   filter(membership %in% popular_memberships,
          n_stopovers > 1) %>%
@@ -486,7 +526,7 @@ a cool look?
 df %>%
   filter(! is.na(membership)) %>%
   group_by(membership) %>%
-  summarise(mean_trip_minutes = mean(trip_seconds) / 60) %>%
+  summarise(mean_trip_minutes = mean(trip_minutes)) %>%
   arrange(desc(mean_trip_minutes)) %>%
   ggplot(aes(x=reorder(membership, mean_trip_minutes), mean_trip_minutes)) +
   geom_col() +
@@ -515,21 +555,22 @@ df %>%
 # busy time is the end of, or immediately after, the workday: 5-7pm
 # morning use is WAY lower. Are people commuting one way?
 df %>%
-  ggplot(aes(trip_seconds/ 60)) +
-  geom_histogram()
+  ggplot(aes(trip_minutes)) +
+  geom_histogram(binwidth = 5) +
+  scale_x_continuous(breaks=seq(0,120,10), minor_breaks = waiver(), lim = c(-5, 125))  
 
 # mean trip time by return hour
 # busy time is still the end of, or immediately after, the workday: 5-7pm
 # Is this spike in trips a one-way commute FROM work TO home?
 # Do people do this because they don't want to be sweaty at work?
 df %>%
-  ggplot(aes(return_hour)) +
+  ggplot(aes(hour(return_time))) +
   geom_bar()
 
 ```
 
 
-```{r}
+```{r }
 df %>% 
   mutate(day = as_date(depart_time)) %>% 
   filter(between(day, max(day) - 365, max(day) - 1)) %>% 
